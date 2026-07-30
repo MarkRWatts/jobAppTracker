@@ -1,0 +1,82 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/db";
+import { ApplicationStatus } from "@/generated/prisma/enums";
+import { textOrNull, parseOccurredAt } from "@/lib/forms";
+
+function parseStatus(formData: FormData): ApplicationStatus {
+  const value = formData.get("status");
+  if (typeof value === "string" && value in ApplicationStatus) return value as ApplicationStatus;
+  throw new Error("Status is required");
+}
+
+/** currentStatus is denormalized as "whichever StatusEvent has the latest occurredAt" — recomputed after every add/edit/delete, since events can be logged out of chronological order (e.g. backfilling a call that happened last week). */
+async function recomputeCurrentStatus(applicationId: string): Promise<void> {
+  const latest = await prisma.statusEvent.findFirst({
+    where: { applicationId },
+    orderBy: { occurredAt: "desc" },
+  });
+  if (!latest) {
+    // Every application must keep at least one status event — see the
+    // guard in deleteStatusEvent. If this ever fires, something else
+    // deleted the last event out from under us.
+    throw new Error("Application has no status events left");
+  }
+  await prisma.application.update({
+    where: { id: applicationId },
+    data: { currentStatus: latest.status },
+  });
+}
+
+function revalidateApplication(applicationId: string) {
+  revalidatePath("/");
+  revalidatePath(`/applications/${applicationId}`);
+}
+
+export async function logStatusEvent(applicationId: string, formData: FormData): Promise<void> {
+  const status = parseStatus(formData);
+  const stageLabel = textOrNull(formData, "stageLabel");
+  const occurredAt = parseOccurredAt(formData);
+  const notes = textOrNull(formData, "notes");
+
+  await prisma.statusEvent.create({
+    data: { applicationId, status, stageLabel, occurredAt, notes },
+  });
+  await recomputeCurrentStatus(applicationId);
+
+  revalidateApplication(applicationId);
+}
+
+export async function updateStatusEvent(eventId: string, formData: FormData): Promise<void> {
+  const existing = await prisma.statusEvent.findUniqueOrThrow({ where: { id: eventId } });
+
+  const status = parseStatus(formData);
+  const stageLabel = textOrNull(formData, "stageLabel");
+  const occurredAt = parseOccurredAt(formData);
+  const notes = textOrNull(formData, "notes");
+
+  await prisma.statusEvent.update({
+    where: { id: eventId },
+    data: { status, stageLabel, occurredAt, notes },
+  });
+  await recomputeCurrentStatus(existing.applicationId);
+
+  revalidateApplication(existing.applicationId);
+  redirect(`/applications/${existing.applicationId}`);
+}
+
+export async function deleteStatusEvent(eventId: string): Promise<void> {
+  const existing = await prisma.statusEvent.findUniqueOrThrow({ where: { id: eventId } });
+
+  const remainingCount = await prisma.statusEvent.count({ where: { applicationId: existing.applicationId } });
+  if (remainingCount <= 1) {
+    throw new Error("Can't delete the only status event on an application");
+  }
+
+  await prisma.statusEvent.delete({ where: { id: eventId } });
+  await recomputeCurrentStatus(existing.applicationId);
+
+  revalidateApplication(existing.applicationId);
+}

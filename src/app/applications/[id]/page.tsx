@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getApplication } from "@/lib/applications/queries";
+import { logStatusEvent } from "@/lib/applications/statusEvents";
 import { StatusBadge } from "@/components/StatusBadge";
 import { DeleteApplicationButton } from "@/components/DeleteApplicationButton";
-import { SOURCE_LABELS, STATUS_LABELS, formatDateTime } from "@/lib/format";
+import { DeleteStatusEventButton } from "@/components/DeleteStatusEventButton";
+import { StatusEventFormFields } from "@/components/StatusEventFormFields";
+import { SOURCE_LABELS, STATUS_LABELS, formatDateTime, toDateTimeLocalValue } from "@/lib/format";
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -83,19 +86,37 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           {application.statusEvents.map((event) => (
             <li
               key={event.id}
-              className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              className="flex flex-col gap-1 rounded-lg border border-zinc-200 bg-white px-4 py-2 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
-                {STATUS_LABELS[event.status]}
-                {event.stageLabel ? ` — ${event.stageLabel}` : ""}
-              </span>
-              <span className="text-sm text-zinc-400 dark:text-zinc-500">{formatDateTime(event.occurredAt)}</span>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-sm font-medium text-zinc-700 dark:text-zinc-200">
+                  {STATUS_LABELS[event.status]}
+                  {event.stageLabel ? ` — ${event.stageLabel}` : ""}
+                </span>
+                <div className="flex shrink-0 items-center gap-3">
+                  <span className="text-sm text-zinc-400 dark:text-zinc-500">{formatDateTime(event.occurredAt)}</span>
+                  <Link
+                    href={`/applications/${application.id}/events/${event.id}/edit`}
+                    className="text-xs font-medium text-zinc-500 hover:underline dark:text-zinc-400"
+                  >
+                    Edit
+                  </Link>
+                  <DeleteStatusEventButton id={event.id} />
+                </div>
+              </div>
+              {event.notes && <p className="text-sm text-zinc-500 dark:text-zinc-400">{event.notes}</p>}
             </li>
           ))}
         </ul>
-        <p className="text-xs text-zinc-400 dark:text-zinc-500">
-          Logging further status updates (recruiter calls, interview stages, outcomes) is coming in the next phase.
-        </p>
+      </section>
+
+      <section className="flex flex-col gap-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+          Log an update
+        </h2>
+        <form action={logStatusEvent.bind(null, application.id)}>
+          <StatusEventFormFields submitLabel="Log update" defaults={{ occurredAt: toDateTimeLocalValue(new Date()) }} />
+        </form>
       </section>
     </main>
   );

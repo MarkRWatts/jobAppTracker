@@ -5,33 +5,12 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { findOrCreateCompany } from "@/lib/companies/queries";
 import { Source, ApplicationStatus } from "@/generated/prisma/enums";
-
-function textOrNull(formData: FormData, key: string): string | null {
-  const value = formData.get(key);
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
-}
-
-function requiredText(formData: FormData, key: string, label: string): string {
-  const value = textOrNull(formData, key);
-  if (!value) throw new Error(`${label} is required`);
-  return value;
-}
+import { textOrNull, requiredText, parseOccurredAt } from "@/lib/forms";
 
 function parseSource(formData: FormData): Source {
   const value = formData.get("source");
   if (typeof value === "string" && value in Source) return value as Source;
   throw new Error("Source is required");
-}
-
-function parseOccurredAt(formData: FormData): Date {
-  const value = formData.get("occurredAt");
-  if (typeof value === "string" && value !== "") {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return new Date();
 }
 
 /** Shared field parsing for both create and update — everything except the initial status/occurredAt, which only create uses. */

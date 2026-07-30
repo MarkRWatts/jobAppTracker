@@ -7,6 +7,10 @@ export function listApplications() {
   });
 }
 
+export function getStatusEvent(eventId: string) {
+  return prisma.statusEvent.findUnique({ where: { id: eventId } });
+}
+
 export function getApplication(id: string) {
   return prisma.application.findUnique({
     where: { id },
