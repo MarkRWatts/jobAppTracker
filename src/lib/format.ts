@@ -55,3 +55,10 @@ export function toDateTimeLocalValue(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
+
+/** "Today", "1d", "5d" etc — used for a card's days-in-current-status. */
+export function daysSince(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / (1000 * 60 * 60 * 24));
+  if (days <= 0) return "Today";
+  return `${days}d`;
+}

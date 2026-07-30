@@ -32,7 +32,18 @@ async function recomputeCurrentStatus(applicationId: string): Promise<void> {
 
 function revalidateApplication(applicationId: string) {
   revalidatePath("/");
+  revalidatePath("/list");
   revalidatePath(`/applications/${applicationId}`);
+}
+
+/** Used by the board's drag-and-drop — dropping a card on a column logs a plain status change with no stage label/notes, timestamped now. */
+export async function moveApplicationStatus(applicationId: string, status: ApplicationStatus): Promise<void> {
+  await prisma.statusEvent.create({
+    data: { applicationId, status, occurredAt: new Date() },
+  });
+  await recomputeCurrentStatus(applicationId);
+
+  revalidateApplication(applicationId);
 }
 
 export async function logStatusEvent(applicationId: string, formData: FormData): Promise<void> {

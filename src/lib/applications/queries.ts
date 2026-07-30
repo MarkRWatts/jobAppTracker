@@ -1,9 +1,15 @@
 import { prisma } from "@/lib/db";
+import { buildOrderBy, buildWhere, type ApplicationFilters, type ApplicationSort } from "./filters";
 
-export function listApplications() {
+/** Applications with their company and latest status event (used for "days in stage" on the board and the "last update" column in the list). */
+export function listApplications(filters: ApplicationFilters, sort: ApplicationSort) {
   return prisma.application.findMany({
-    include: { company: true },
-    orderBy: { createdAt: "desc" },
+    where: buildWhere(filters),
+    orderBy: buildOrderBy(sort),
+    include: {
+      company: true,
+      statusEvents: { orderBy: { occurredAt: "desc" }, take: 1 },
+    },
   });
 }
 
