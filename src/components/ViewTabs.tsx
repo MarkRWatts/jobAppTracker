@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export function ViewTabs({ active, query }: { active: "board" | "list"; query: string }) {
+export function ViewTabs({ active, query }: { active: "board" | "list" | "dashboard"; query: string }) {
   const suffix = query ? `?${query}` : "";
   return (
     <div className="flex gap-1 rounded-md border border-zinc-200 p-1 dark:border-zinc-800">
@@ -9,6 +9,9 @@ export function ViewTabs({ active, query }: { active: "board" | "list"; query: s
       </Link>
       <Link href={`/list${suffix}`} className={tabClass(active === "list")}>
         List
+      </Link>
+      <Link href="/dashboard" className={tabClass(active === "dashboard")}>
+        Dashboard
       </Link>
     </div>
   );
