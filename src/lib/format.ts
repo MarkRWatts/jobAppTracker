@@ -62,3 +62,9 @@ export function daysSince(date: Date): string {
   if (days <= 0) return "Today";
   return `${days}d`;
 }
+
+/** "CV", "Cover letter", "CV · Cover letter", or null if neither was used. */
+export function cvCoverLetterSummary(usedCustomCv: boolean, usedCoverLetter: boolean): string | null {
+  const parts = [usedCustomCv && "CV", usedCoverLetter && "Cover letter"].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}

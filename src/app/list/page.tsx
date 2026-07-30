@@ -12,7 +12,7 @@ import { FilterBar } from "@/components/FilterBar";
 import { ViewTabs } from "@/components/ViewTabs";
 import { EmptyState } from "@/components/EmptyState";
 import { StatusBadge } from "@/components/StatusBadge";
-import { SOURCE_LABELS, formatDate } from "@/lib/format";
+import { SOURCE_LABELS, formatDate, cvCoverLetterSummary } from "@/lib/format";
 
 const COLUMNS: { field: SortField; label: string }[] = [
   { field: "jobTitle", label: "Job title" },
@@ -83,7 +83,7 @@ export default async function ListPage({ searchParams }: { searchParams: Promise
                   </td>
                   <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{formatDate(application.createdAt)}</td>
                   <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
-                    {[application.usedCustomCv && "CV", application.usedCoverLetter && "Cover letter"].filter(Boolean).join(" · ") || "—"}
+                    {cvCoverLetterSummary(application.usedCustomCv, application.usedCoverLetter) ?? "—"}
                   </td>
                 </tr>
               ))}

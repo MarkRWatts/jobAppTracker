@@ -7,7 +7,7 @@ import type { DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { ApplicationStatus, Source } from "@/generated/prisma/enums";
 import { moveApplicationStatus } from "@/lib/applications/statusEvents";
-import { SOURCE_LABELS, STATUS_LABELS, daysSince } from "@/lib/format";
+import { SOURCE_LABELS, STATUS_LABELS, daysSince, cvCoverLetterSummary } from "@/lib/format";
 import { PIPELINE_STATUSES, CLOSED_STATUSES, CLOSED_COLUMN_ID } from "@/lib/board";
 
 type BoardApplication = {
@@ -15,6 +15,8 @@ type BoardApplication = {
   jobTitle: string;
   currentStatus: ApplicationStatus;
   source: Source;
+  usedCustomCv: boolean;
+  usedCoverLetter: boolean;
   company: { name: string };
   statusEvents: { occurredAt: Date }[];
 };
@@ -152,6 +154,7 @@ function Card({ application }: { application: BoardApplication }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id });
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const latestEvent = application.statusEvents[0];
+  const cvCoverLetter = cvCoverLetterSummary(application.usedCustomCv, application.usedCoverLetter);
 
   return (
     <div
@@ -172,6 +175,7 @@ function Card({ application }: { application: BoardApplication }) {
           </span>
           {latestEvent && <span className="text-[11px] text-zinc-400">{daysSince(latestEvent.occurredAt)}</span>}
         </div>
+        {cvCoverLetter && <span className="text-[11px] text-zinc-400">{cvCoverLetter}</span>}
       </Link>
     </div>
   );
