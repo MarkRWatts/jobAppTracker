@@ -1,0 +1,107 @@
+// Job Application Tracker data model — see ../../jobAppTracker-docs/project-plan.md for background.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Source {
+  LINKEDIN
+  TOTAL_JOBS
+  REED
+  DIRECT
+  OTHER
+}
+
+// A plain status list, not a strict state machine — real applications go
+// sideways (a DISCOUNTED role can come back, a recruiter call can happen
+// after an interview), so any status can be logged at any time.
+enum ApplicationStatus {
+  SAVED
+  APPLIED
+  SCREENING
+  RECRUITER_CALL
+  INTERVIEW
+  OFFER
+  ACCEPTED
+  DISCOUNTED // rejected before/without reaching an interview
+  UNSUCCESSFUL // rejected after at least one interview
+  WITHDRAWN
+}
+
+model Company {
+  id           String        @id @default(cuid())
+  name         String
+  website      String?
+  notes        String?
+  applications Application[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Application {
+  id          String  @id @default(cuid())
+  companyId   String
+  company     Company @relation(fields: [companyId], references: [id])
+  jobTitle    String
+  source      Source
+  jobUrl      String?
+  jobDescription String?
+  location    String?
+  salaryRange String?
+
+  // Denormalized from the latest StatusEvent, for fast board/list queries.
+  currentStatus ApplicationStatus @default(SAVED)
+
+  usedCustomCv    Boolean @default(false)
+  cvVersionLabel  String?
+  cvUrl           String?
+  usedCoverLetter Boolean @default(false)
+  coverLetterUrl  String?
+
+  notes String?
+
+  statusEvents StatusEvent[]
+  contacts     Contact[]
+  reminders    Reminder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model StatusEvent {
+  id            String            @id @default(cuid())
+  applicationId String
+  application   Application       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  status        ApplicationStatus
+  // Free text for interview sub-stages, e.g. "Stage 2 — Technical".
+  stageLabel    String?
+  occurredAt    DateTime
+  notes         String?
+  createdAt     DateTime          @default(now())
+}
+
+model Contact {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  name          String
+  role          String?
+  email         String?
+  phone         String?
+  notes         String?
+}
+
+model Reminder {
+  id            String      @id @default(cuid())
+  applicationId String
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  dueAt         DateTime
+  description   String
+  done          Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+}
