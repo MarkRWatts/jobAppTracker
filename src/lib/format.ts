@@ -68,3 +68,19 @@ export function cvCoverLetterSummary(usedCustomCv: boolean, usedCoverLetter: boo
   const parts = [usedCustomCv && "CV", usedCoverLetter && "Cover letter"].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : null;
 }
+
+export type DueTone = "overdue" | "soon" | "later";
+
+/** "Overdue by 2d", "Due today", "Due tomorrow", "Due in 5d" — plus a tone for styling. */
+export function getDueStatus(date: Date): { label: string; tone: DueTone } {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dueDay = new Date(date);
+  dueDay.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((dueDay.getTime() - startOfToday.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { label: `Overdue by ${Math.abs(diffDays)}d`, tone: "overdue" };
+  if (diffDays === 0) return { label: "Due today", tone: "soon" };
+  if (diffDays === 1) return { label: "Due tomorrow", tone: "soon" };
+  return { label: `Due in ${diffDays}d`, tone: "later" };
+}

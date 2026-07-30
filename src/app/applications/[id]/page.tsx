@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { DeleteApplicationButton } from "@/components/DeleteApplicationButton";
 import { DeleteStatusEventButton } from "@/components/DeleteStatusEventButton";
 import { StatusEventFormFields } from "@/components/StatusEventFormFields";
+import { RemindersSection } from "@/components/reminders/RemindersSection";
 import { SOURCE_LABELS, STATUS_LABELS, formatDateTime, toDateTimeLocalValue } from "@/lib/format";
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -118,6 +119,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           <StatusEventFormFields submitLabel="Log update" defaults={{ occurredAt: toDateTimeLocalValue(new Date()) }} />
         </form>
       </section>
+
+      <RemindersSection applicationId={application.id} reminders={application.reminders} />
     </main>
   );
 }

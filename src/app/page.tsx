@@ -5,12 +5,17 @@ import { FilterBar } from "@/components/FilterBar";
 import { ViewTabs } from "@/components/ViewTabs";
 import { EmptyState } from "@/components/EmptyState";
 import { Board } from "@/components/Board";
+import { UpcomingReminders } from "@/components/reminders/UpcomingReminders";
+import { getUpcomingReminders } from "@/lib/reminders/queries";
 
 export default async function BoardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const filters = parseFilters(params);
   const sort = parseSort(params);
-  const applications = await listApplications(filters, sort);
+  const [applications, upcomingReminders] = await Promise.all([
+    listApplications(filters, sort),
+    getUpcomingReminders(),
+  ]);
   const query = filterSearchParams(filters).toString();
   const hasFilters = filters.sources.length > 0 || filters.statuses.length > 0 || Boolean(filters.from) || Boolean(filters.to);
 
@@ -28,6 +33,8 @@ export default async function BoardPage({ searchParams }: { searchParams: Promis
           New application
         </Link>
       </div>
+
+      <UpcomingReminders reminders={upcomingReminders} />
 
       <FilterBar basePath="/" filters={filters} />
 
