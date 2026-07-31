@@ -1,4 +1,4 @@
-import type { Source, ApplicationStatus, AttachmentCategory } from "@/generated/prisma/enums";
+import type { Source, ApplicationStatus, AttachmentCategory, EmploymentType, IR35Status } from "@/generated/prisma/enums";
 
 export const SOURCE_LABELS: Record<Source, string> = {
   LINKEDIN: "LinkedIn",
@@ -67,6 +67,17 @@ export function daysSince(date: Date): string {
   if (days <= 0) return "Today";
   return `${days}d`;
 }
+
+export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  PERMANENT: "Permanent",
+  CONTRACT: "Contract",
+};
+
+export const IR35_STATUS_LABELS: Record<IR35Status, string> = {
+  INSIDE: "Inside IR35",
+  OUTSIDE: "Outside IR35",
+  UNKNOWN: "Unknown",
+};
 
 export const ATTACHMENT_CATEGORY_LABELS: Record<AttachmentCategory, string> = {
   CV: "CV",

@@ -39,6 +39,18 @@ enum AttachmentCategory {
   OTHER
 }
 
+enum EmploymentType {
+  PERMANENT
+  CONTRACT
+}
+
+// Only meaningful when employmentType is CONTRACT.
+enum IR35Status {
+  INSIDE
+  OUTSIDE
+  UNKNOWN
+}
+
 model Company {
   id           String        @id @default(cuid())
   name         String
@@ -58,7 +70,14 @@ model Application {
   jobUrl      String?
   jobDescription String?
   location    String?
-  salaryRange String?
+
+  // salaryRange applies to PERMANENT roles; dayRate + ir35Status apply to
+  // CONTRACT roles. Both are free text to match the loose formats job ads
+  // actually use (ranges, "DOE", currency variations, etc).
+  employmentType EmploymentType @default(PERMANENT)
+  salaryRange    String?
+  dayRate        String?
+  ir35Status     IR35Status?
 
   // Denormalized from the latest StatusEvent, for fast board/list queries.
   currentStatus ApplicationStatus @default(SAVED)

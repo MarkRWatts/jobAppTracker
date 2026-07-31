@@ -9,7 +9,15 @@ import { StatusEventFormFields } from "@/components/StatusEventFormFields";
 import { RemindersSection } from "@/components/reminders/RemindersSection";
 import { AttachmentsSection } from "@/components/attachments/AttachmentsSection";
 import { ExpandableText } from "@/components/ExpandableText";
-import { SOURCE_LABELS, STATUS_LABELS, formatDateTime, toDateTimeLocalValue } from "@/lib/format";
+import { EmploymentType } from "@/generated/prisma/enums";
+import {
+  SOURCE_LABELS,
+  STATUS_LABELS,
+  EMPLOYMENT_TYPE_LABELS,
+  IR35_STATUS_LABELS,
+  formatDateTime,
+  toDateTimeLocalValue,
+} from "@/lib/format";
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -45,7 +53,15 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
 
       <section className="grid grid-cols-1 gap-4 rounded-lg border border-zinc-200 bg-white p-4 shadow-sm sm:grid-cols-2 dark:border-zinc-800 dark:bg-zinc-900">
         <Detail label="Location" value={application.location} />
-        <Detail label="Salary range" value={application.salaryRange} />
+        <Detail label="Employment type" value={EMPLOYMENT_TYPE_LABELS[application.employmentType]} />
+        {application.employmentType === EmploymentType.CONTRACT ? (
+          <>
+            <Detail label="Day rate" value={application.dayRate} />
+            <Detail label="IR35 status" value={application.ir35Status ? IR35_STATUS_LABELS[application.ir35Status] : null} />
+          </>
+        ) : (
+          <Detail label="Salary range" value={application.salaryRange} />
+        )}
         <Detail
           label="Job URL"
           value={

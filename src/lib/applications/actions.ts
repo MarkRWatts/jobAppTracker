@@ -4,13 +4,25 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { findOrCreateCompany } from "@/lib/companies/queries";
-import { Source, ApplicationStatus } from "@/generated/prisma/enums";
+import { Source, ApplicationStatus, EmploymentType, IR35Status } from "@/generated/prisma/enums";
 import { textOrNull, requiredText, parseOccurredAt } from "@/lib/forms";
 
 function parseSource(formData: FormData): Source {
   const value = formData.get("source");
   if (typeof value === "string" && value in Source) return value as Source;
   throw new Error("Source is required");
+}
+
+function parseEmploymentType(formData: FormData): EmploymentType {
+  const value = formData.get("employmentType");
+  if (typeof value === "string" && value in EmploymentType) return value as EmploymentType;
+  return EmploymentType.PERMANENT;
+}
+
+function parseIr35Status(formData: FormData): IR35Status | null {
+  const value = formData.get("ir35Status");
+  if (typeof value === "string" && value in IR35Status) return value as IR35Status;
+  return null;
 }
 
 /** Shared field parsing for both create and update — everything except the initial status/occurredAt, which only create uses. */
@@ -22,7 +34,10 @@ async function parseApplicationFields(formData: FormData) {
     jobUrl: textOrNull(formData, "jobUrl"),
     jobDescription: textOrNull(formData, "jobDescription"),
     location: textOrNull(formData, "location"),
+    employmentType: parseEmploymentType(formData),
     salaryRange: textOrNull(formData, "salaryRange"),
+    dayRate: textOrNull(formData, "dayRate"),
+    ir35Status: parseIr35Status(formData),
     usedCustomCv: formData.get("usedCustomCv") === "on",
     cvVersionLabel: textOrNull(formData, "cvVersionLabel"),
     cvUrl: textOrNull(formData, "cvUrl"),

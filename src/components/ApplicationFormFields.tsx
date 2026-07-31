@@ -1,5 +1,6 @@
 import { Source, ApplicationStatus } from "@/generated/prisma/enums";
 import { SOURCE_LABELS } from "@/lib/format";
+import { EmploymentFields } from "@/components/EmploymentFields";
 
 const inputClass =
   "w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
@@ -12,7 +13,10 @@ type ApplicationFormDefaults = {
   source?: string;
   jobUrl?: string | null;
   location?: string | null;
+  employmentType?: string;
   salaryRange?: string | null;
+  dayRate?: string | null;
+  ir35Status?: string | null;
   jobDescription?: string | null;
   usedCustomCv?: boolean;
   cvVersionLabel?: string | null;
@@ -114,19 +118,12 @@ export function ApplicationFormFields({
               placeholder="London / Remote"
             />
           </div>
-          <div className={fieldWrapClass}>
-            <label className={labelClass} htmlFor="salaryRange">
-              Salary range
-            </label>
-            <input
-              id="salaryRange"
-              name="salaryRange"
-              type="text"
-              defaultValue={defaults?.salaryRange ?? undefined}
-              className={inputClass}
-              placeholder="£90k–£110k"
-            />
-          </div>
+          <EmploymentFields
+            defaultEmploymentType={defaults?.employmentType}
+            defaultSalaryRange={defaults?.salaryRange}
+            defaultDayRate={defaults?.dayRate}
+            defaultIr35Status={defaults?.ir35Status}
+          />
         </div>
         <div className={fieldWrapClass}>
           <label className={labelClass} htmlFor="jobDescription">
