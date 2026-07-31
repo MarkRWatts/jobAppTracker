@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -31,23 +31,35 @@ export function Board({
   const [closedExpanded, setClosedExpanded] = useState(false);
   const [, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
-  // A completed drag (distance >= the activation constraint above) still ends
-  // with the pointer over the dragged card's own link, since it isn't a
-  // DragOverlay — it's the real card, moved with a CSS transform. That makes
-  // the browser fire a click on it right after drop. onDragStart only fires
-  // once the activation constraint is met, so it's a reliable "a real drag
-  // just happened" signal — suppress the very next click on any card link.
+
+  // A completed drag (distance >= the activation constraint above) still
+  // ends with the pointer over the dragged card's own link, since it isn't a
+  // DragOverlay — it's the real card, moved with a CSS transform. That would
+  // normally make the browser fire a click on it right after drop. dnd-kit
+  // already guards against this itself (it registers its own capture-phase
+  // `click` listener on `document` the moment a drag activates, calling
+  // stopPropagation so app code never sees the click) — but stopPropagation
+  // doesn't call preventDefault, so it stops JS handlers (including Next's
+  // own Link click handling) without stopping the browser's own default
+  // action for a real <a href>, i.e. a plain full-page navigation. So this
+  // needs its own capture-phase document listener, registered once at mount
+  // (before any drag can register dnd-kit's), specifically to preventDefault
+  // before dnd-kit's listener cuts off propagation to everything else.
   const justDraggedRef = useRef(false);
+
+  useEffect(() => {
+    function handleDocumentClickCapture(event: MouseEvent) {
+      if (justDraggedRef.current) {
+        event.preventDefault();
+        justDraggedRef.current = false;
+      }
+    }
+    document.addEventListener("click", handleDocumentClickCapture, true);
+    return () => document.removeEventListener("click", handleDocumentClickCapture, true);
+  }, []);
 
   function handleDragStart() {
     justDraggedRef.current = true;
-  }
-
-  function handleCardLinkClick(event: React.MouseEvent) {
-    if (justDraggedRef.current) {
-      event.preventDefault();
-      justDraggedRef.current = false;
-    }
   }
 
   const byStatus = new Map<ApplicationStatus, BoardApplication[]>();
@@ -79,39 +91,20 @@ export function Board({
     <DndContext id="applications-board" sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex items-start gap-4 overflow-x-auto pb-4">
         {openStatuses.map((status) => (
-          <Column
-            key={status}
-            id={status}
-            title={STATUS_LABELS[status]}
-            applications={byStatus.get(status) ?? []}
-            onCardLinkClick={handleCardLinkClick}
-          />
+          <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
         ))}
         {partialClosedStatuses.map((status) => (
-          <Column
-            key={status}
-            id={status}
-            title={STATUS_LABELS[status]}
-            applications={byStatus.get(status) ?? []}
-            onCardLinkClick={handleCardLinkClick}
-          />
+          <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
         ))}
         {showMergedClosed &&
           (closedExpanded ? (
             CLOSED_STATUSES.map((status) => (
-              <Column
-                key={status}
-                id={status}
-                title={STATUS_LABELS[status]}
-                applications={byStatus.get(status) ?? []}
-                onCardLinkClick={handleCardLinkClick}
-              />
+              <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
             ))
           ) : (
             <ClosedColumn
               applications={CLOSED_STATUSES.flatMap((s) => byStatus.get(s) ?? [])}
               onExpand={() => setClosedExpanded(true)}
-              onCardLinkClick={handleCardLinkClick}
             />
           ))}
         {showMergedClosed && closedExpanded && (
@@ -128,17 +121,7 @@ export function Board({
   );
 }
 
-function Column({
-  id,
-  title,
-  applications,
-  onCardLinkClick,
-}: {
-  id: string;
-  title: string;
-  applications: BoardApplication[];
-  onCardLinkClick: (event: React.MouseEvent) => void;
-}) {
+function Column({ id, title, applications }: { id: string; title: string; applications: BoardApplication[] }) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div className="flex w-64 shrink-0 flex-col gap-2">
@@ -153,22 +136,14 @@ function Column({
         }`}
       >
         {applications.map((application) => (
-          <Card key={application.id} application={application} onLinkClick={onCardLinkClick} />
+          <Card key={application.id} application={application} />
         ))}
       </div>
     </div>
   );
 }
 
-function ClosedColumn({
-  applications,
-  onExpand,
-  onCardLinkClick,
-}: {
-  applications: BoardApplication[];
-  onExpand: () => void;
-  onCardLinkClick: (event: React.MouseEvent) => void;
-}) {
+function ClosedColumn({ applications, onExpand }: { applications: BoardApplication[]; onExpand: () => void }) {
   // Not a real drop target while collapsed — ambiguous which closed status a
   // card dropped here should get, so dragging in requires expanding first.
   const { setNodeRef } = useDroppable({ id: CLOSED_COLUMN_ID, disabled: true });
@@ -191,9 +166,7 @@ function ClosedColumn({
         {applications.length === 0 ? (
           <p className="px-1 text-xs text-zinc-400">Nothing closed yet.</p>
         ) : (
-          applications.map((application) => (
-            <Card key={application.id} application={application} onLinkClick={onCardLinkClick} />
-          ))
+          applications.map((application) => <Card key={application.id} application={application} />)
         )}
         <button
           type="button"
@@ -207,7 +180,7 @@ function ClosedColumn({
   );
 }
 
-function Card({ application, onLinkClick }: { application: BoardApplication; onLinkClick: (event: React.MouseEvent) => void }) {
+function Card({ application }: { application: BoardApplication }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id });
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const latestEvent = application.statusEvents[0];
@@ -223,7 +196,7 @@ function Card({ application, onLinkClick }: { application: BoardApplication; onL
         isDragging ? "opacity-50" : ""
       }`}
     >
-      <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false} onClick={onLinkClick}>
+      <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false}>
         <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{application.jobTitle}</span>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">{application.company.name}</span>
         <div className="flex items-center justify-between pt-1">
