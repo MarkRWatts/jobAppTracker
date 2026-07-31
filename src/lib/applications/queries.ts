@@ -41,6 +41,7 @@ export function getApplication(id: string) {
       statusEvents: { orderBy: { occurredAt: "desc" } },
       contacts: true,
       reminders: { orderBy: { dueAt: "asc" } },
+      attachments: { orderBy: { createdAt: "asc" } },
     },
   });
 }

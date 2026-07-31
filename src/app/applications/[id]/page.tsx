@@ -7,6 +7,8 @@ import { DeleteApplicationButton } from "@/components/DeleteApplicationButton";
 import { DeleteStatusEventButton } from "@/components/DeleteStatusEventButton";
 import { StatusEventFormFields } from "@/components/StatusEventFormFields";
 import { RemindersSection } from "@/components/reminders/RemindersSection";
+import { AttachmentsSection } from "@/components/attachments/AttachmentsSection";
+import { ExpandableText } from "@/components/ExpandableText";
 import { SOURCE_LABELS, STATUS_LABELS, formatDateTime, toDateTimeLocalValue } from "@/lib/format";
 
 export default async function ApplicationDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -66,9 +68,9 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Job description
           </h2>
-          <p className="whitespace-pre-wrap rounded-lg border border-zinc-200 bg-white p-4 text-sm text-zinc-700 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-            {application.jobDescription}
-          </p>
+          <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+            <ExpandableText text={application.jobDescription} />
+          </div>
         </section>
       )}
 
@@ -121,6 +123,8 @@ export default async function ApplicationDetailPage({ params }: { params: Promis
       </section>
 
       <RemindersSection applicationId={application.id} reminders={application.reminders} />
+
+      <AttachmentsSection applicationId={application.id} attachments={application.attachments} />
     </main>
   );
 }

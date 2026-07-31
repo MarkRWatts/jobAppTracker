@@ -1,4 +1,4 @@
-import type { Source, ApplicationStatus } from "@/generated/prisma/enums";
+import type { Source, ApplicationStatus, AttachmentCategory } from "@/generated/prisma/enums";
 
 export const SOURCE_LABELS: Record<Source, string> = {
   LINKEDIN: "LinkedIn",
@@ -68,10 +68,24 @@ export function daysSince(date: Date): string {
   return `${days}d`;
 }
 
+export const ATTACHMENT_CATEGORY_LABELS: Record<AttachmentCategory, string> = {
+  CV: "CV",
+  COVER_LETTER: "Cover letter",
+  OTHER: "Other",
+};
+
 /** "CV", "Cover letter", "CV · Cover letter", or null if neither was used. */
 export function cvCoverLetterSummary(usedCustomCv: boolean, usedCoverLetter: boolean): string | null {
   const parts = [usedCustomCv && "CV", usedCoverLetter && "Cover letter"].filter(Boolean);
   return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** "48 KB", "1.2 MB" etc. */
+export function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 export type DueTone = "overdue" | "soon" | "later";

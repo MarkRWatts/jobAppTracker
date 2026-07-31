@@ -38,3 +38,6 @@ yarn-error.log*
 # generated
 *.tsbuildinfo
 /src/generated/prisma
+
+# uploaded attachments (local dev — in Docker this is a named volume instead)
+/uploads
