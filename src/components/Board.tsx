@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import type { DragEndEvent } from "@dnd-kit/core";
@@ -31,6 +31,24 @@ export function Board({
   const [closedExpanded, setClosedExpanded] = useState(false);
   const [, startTransition] = useTransition();
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  // A completed drag (distance >= the activation constraint above) still ends
+  // with the pointer over the dragged card's own link, since it isn't a
+  // DragOverlay — it's the real card, moved with a CSS transform. That makes
+  // the browser fire a click on it right after drop. onDragStart only fires
+  // once the activation constraint is met, so it's a reliable "a real drag
+  // just happened" signal — suppress the very next click on any card link.
+  const justDraggedRef = useRef(false);
+
+  function handleDragStart() {
+    justDraggedRef.current = true;
+  }
+
+  function handleCardLinkClick(event: React.MouseEvent) {
+    if (justDraggedRef.current) {
+      event.preventDefault();
+      justDraggedRef.current = false;
+    }
+  }
 
   const byStatus = new Map<ApplicationStatus, BoardApplication[]>();
   for (const application of applications) {
@@ -58,23 +76,42 @@ export function Board({
   }
 
   return (
-    <DndContext id="applications-board" sensors={sensors} onDragEnd={handleDragEnd}>
+    <DndContext id="applications-board" sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
       <div className="flex items-start gap-4 overflow-x-auto pb-4">
         {openStatuses.map((status) => (
-          <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
+          <Column
+            key={status}
+            id={status}
+            title={STATUS_LABELS[status]}
+            applications={byStatus.get(status) ?? []}
+            onCardLinkClick={handleCardLinkClick}
+          />
         ))}
         {partialClosedStatuses.map((status) => (
-          <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
+          <Column
+            key={status}
+            id={status}
+            title={STATUS_LABELS[status]}
+            applications={byStatus.get(status) ?? []}
+            onCardLinkClick={handleCardLinkClick}
+          />
         ))}
         {showMergedClosed &&
           (closedExpanded ? (
             CLOSED_STATUSES.map((status) => (
-              <Column key={status} id={status} title={STATUS_LABELS[status]} applications={byStatus.get(status) ?? []} />
+              <Column
+                key={status}
+                id={status}
+                title={STATUS_LABELS[status]}
+                applications={byStatus.get(status) ?? []}
+                onCardLinkClick={handleCardLinkClick}
+              />
             ))
           ) : (
             <ClosedColumn
               applications={CLOSED_STATUSES.flatMap((s) => byStatus.get(s) ?? [])}
               onExpand={() => setClosedExpanded(true)}
+              onCardLinkClick={handleCardLinkClick}
             />
           ))}
         {showMergedClosed && closedExpanded && (
@@ -91,7 +128,17 @@ export function Board({
   );
 }
 
-function Column({ id, title, applications }: { id: string; title: string; applications: BoardApplication[] }) {
+function Column({
+  id,
+  title,
+  applications,
+  onCardLinkClick,
+}: {
+  id: string;
+  title: string;
+  applications: BoardApplication[];
+  onCardLinkClick: (event: React.MouseEvent) => void;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id });
   return (
     <div className="flex w-64 shrink-0 flex-col gap-2">
@@ -106,14 +153,22 @@ function Column({ id, title, applications }: { id: string; title: string; applic
         }`}
       >
         {applications.map((application) => (
-          <Card key={application.id} application={application} />
+          <Card key={application.id} application={application} onLinkClick={onCardLinkClick} />
         ))}
       </div>
     </div>
   );
 }
 
-function ClosedColumn({ applications, onExpand }: { applications: BoardApplication[]; onExpand: () => void }) {
+function ClosedColumn({
+  applications,
+  onExpand,
+  onCardLinkClick,
+}: {
+  applications: BoardApplication[];
+  onExpand: () => void;
+  onCardLinkClick: (event: React.MouseEvent) => void;
+}) {
   // Not a real drop target while collapsed — ambiguous which closed status a
   // card dropped here should get, so dragging in requires expanding first.
   const { setNodeRef } = useDroppable({ id: CLOSED_COLUMN_ID, disabled: true });
@@ -136,7 +191,9 @@ function ClosedColumn({ applications, onExpand }: { applications: BoardApplicati
         {applications.length === 0 ? (
           <p className="px-1 text-xs text-zinc-400">Nothing closed yet.</p>
         ) : (
-          applications.map((application) => <Card key={application.id} application={application} />)
+          applications.map((application) => (
+            <Card key={application.id} application={application} onLinkClick={onCardLinkClick} />
+          ))
         )}
         <button
           type="button"
@@ -150,7 +207,7 @@ function ClosedColumn({ applications, onExpand }: { applications: BoardApplicati
   );
 }
 
-function Card({ application }: { application: BoardApplication }) {
+function Card({ application, onLinkClick }: { application: BoardApplication; onLinkClick: (event: React.MouseEvent) => void }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id });
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
   const latestEvent = application.statusEvents[0];
@@ -166,7 +223,7 @@ function Card({ application }: { application: BoardApplication }) {
         isDragging ? "opacity-50" : ""
       }`}
     >
-      <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false}>
+      <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false} onClick={onLinkClick}>
         <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{application.jobTitle}</span>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">{application.company.name}</span>
         <div className="flex items-center justify-between pt-1">
