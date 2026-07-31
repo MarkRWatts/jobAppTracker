@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Application" ALTER COLUMN "boardOrder" SET DEFAULT 0,
+ALTER COLUMN "boardOrder" SET DATA TYPE DOUBLE PRECISION;

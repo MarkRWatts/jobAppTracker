@@ -6,9 +6,15 @@ import { DndContext, PointerSensor, useDraggable, useDroppable, useSensor, useSe
 import type { DragEndEvent } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { ApplicationStatus, Source } from "@/generated/prisma/enums";
-import { moveApplicationStatus } from "@/lib/applications/statusEvents";
-import { SOURCE_LABELS, STATUS_LABELS, daysSince, cvCoverLetterSummary } from "@/lib/format";
+import { moveApplication } from "@/lib/applications/statusEvents";
+import { getApplicationDate } from "@/lib/applications/applicationDate";
+import { SOURCE_LABELS, STATUS_LABELS, formatShortDate, cvCoverLetterSummary } from "@/lib/format";
 import { PIPELINE_STATUSES, CLOSED_STATUSES, CLOSED_COLUMN_ID } from "@/lib/board";
+
+// A card is droppable in its own right (id-namespaced so it can't collide
+// with a column's plain status id) so dropping directly on another card
+// reorders relative to it, not just changes column.
+const CARD_DROP_PREFIX = "card:";
 
 type BoardApplication = {
   id: string;
@@ -18,7 +24,7 @@ type BoardApplication = {
   usedCustomCv: boolean;
   usedCoverLetter: boolean;
   company: { name: string };
-  statusEvents: { occurredAt: Date }[];
+  statusEvents: { status: ApplicationStatus; occurredAt: Date }[];
 };
 
 export function Board({
@@ -79,11 +85,25 @@ export function Board({
     const applicationId = String(event.active.id);
     const overId = event.over?.id;
     if (!overId) return;
-    const newStatus = String(overId) as ApplicationStatus;
-    const current = applications.find((a) => a.id === applicationId);
-    if (!current || current.currentStatus === newStatus) return;
+
+    const overIdStr = String(overId);
+    if (overIdStr === applicationId || overIdStr === CARD_DROP_PREFIX + applicationId) return; // dropped on itself
+
+    let targetStatus: ApplicationStatus;
+    let beforeApplicationId: string | null;
+    if (overIdStr.startsWith(CARD_DROP_PREFIX)) {
+      const beforeId = overIdStr.slice(CARD_DROP_PREFIX.length);
+      const beforeApp = applications.find((a) => a.id === beforeId);
+      if (!beforeApp) return;
+      targetStatus = beforeApp.currentStatus;
+      beforeApplicationId = beforeId;
+    } else {
+      targetStatus = overIdStr as ApplicationStatus;
+      beforeApplicationId = null;
+    }
+
     startTransition(() => {
-      moveApplicationStatus(applicationId, newStatus);
+      moveApplication(applicationId, targetStatus, beforeApplicationId);
     });
   }
 
@@ -145,7 +165,9 @@ function Column({ id, title, applications }: { id: string; title: string; applic
 
 function ClosedColumn({ applications, onExpand }: { applications: BoardApplication[]; onExpand: () => void }) {
   // Not a real drop target while collapsed — ambiguous which closed status a
-  // card dropped here should get, so dragging in requires expanding first.
+  // card dropped on empty space here should get (dropping directly on an
+  // existing card still works fine, since that card's own status is
+  // unambiguous — only "expand to move cards here" is needed for empty space).
   const { setNodeRef } = useDroppable({ id: CLOSED_COLUMN_ID, disabled: true });
   return (
     <div className="flex w-64 shrink-0 flex-col gap-2">
@@ -181,32 +203,42 @@ function ClosedColumn({ applications, onExpand }: { applications: BoardApplicati
 }
 
 function Card({ application }: { application: BoardApplication }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: application.id });
+  const { attributes, listeners, setNodeRef: setDraggableRef, transform, isDragging } = useDraggable({ id: application.id });
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({ id: CARD_DROP_PREFIX + application.id });
   const style = transform ? { transform: CSS.Translate.toString(transform) } : undefined;
-  const latestEvent = application.statusEvents[0];
+  const applicationDate = getApplicationDate(application.statusEvents);
   const cvCoverLetter = cvCoverLetterSummary(application.usedCustomCv, application.usedCoverLetter);
 
   return (
     <div
-      ref={setNodeRef}
+      ref={(node) => {
+        setDraggableRef(node);
+        setDroppableRef(node);
+      }}
       style={style}
       {...listeners}
       {...attributes}
-      className={`touch-none rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${
-        isDragging ? "opacity-50" : ""
+      className={`touch-none rounded-lg border-2 border-transparent p-0.5 transition-colors ${
+        isOver ? "border-zinc-400 dark:border-zinc-500" : ""
       }`}
     >
-      <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false}>
-        <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{application.jobTitle}</span>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">{application.company.name}</span>
-        <div className="flex items-center justify-between pt-1">
-          <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-            {SOURCE_LABELS[application.source]}
-          </span>
-          {latestEvent && <span className="text-[11px] text-zinc-400">{daysSince(latestEvent.occurredAt)}</span>}
-        </div>
-        {cvCoverLetter && <span className="text-[11px] text-zinc-400">{cvCoverLetter}</span>}
-      </Link>
+      <div
+        className={`rounded-md border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900 ${
+          isDragging ? "opacity-50" : ""
+        }`}
+      >
+        <Link href={`/applications/${application.id}`} className="flex flex-col gap-1" draggable={false}>
+          <span className="text-sm font-medium text-zinc-900 dark:text-zinc-50">{application.jobTitle}</span>
+          <span className="text-xs text-zinc-500 dark:text-zinc-400">{application.company.name}</span>
+          <div className="flex items-center justify-between pt-1">
+            <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+              {SOURCE_LABELS[application.source]}
+            </span>
+            <span className="text-[11px] text-zinc-400">{formatShortDate(applicationDate)}</span>
+          </div>
+          {cvCoverLetter && <span className="text-[11px] text-zinc-400">{cvCoverLetter}</span>}
+        </Link>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
-import { listApplications } from "@/lib/applications/queries";
-import { parseFilters, parseSort, filterSearchParams, type SearchParams } from "@/lib/applications/filters";
+import { listApplicationsForBoard } from "@/lib/applications/queries";
+import { parseFilters, filterSearchParams, type SearchParams } from "@/lib/applications/filters";
 import { FilterBar } from "@/components/FilterBar";
 import { ViewTabs } from "@/components/ViewTabs";
 import { EmptyState } from "@/components/EmptyState";
@@ -11,9 +11,8 @@ import { getUpcomingReminders } from "@/lib/reminders/queries";
 export default async function BoardPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   const params = await searchParams;
   const filters = parseFilters(params);
-  const sort = parseSort(params);
   const [applications, upcomingReminders] = await Promise.all([
-    listApplications(filters, sort),
+    listApplicationsForBoard(filters),
     getUpcomingReminders(),
   ]);
   const query = filterSearchParams(filters).toString();

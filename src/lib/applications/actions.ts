@@ -43,6 +43,9 @@ export async function createApplication(formData: FormData): Promise<void> {
     data: {
       ...fields,
       currentStatus: initialStatus,
+      // The only event that exists yet, so it's trivially the application
+      // date — see getApplicationDate for the general case.
+      boardOrder: occurredAt.getTime(),
       statusEvents: { create: { status: initialStatus, occurredAt } },
     },
   });

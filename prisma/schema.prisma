@@ -57,6 +57,13 @@ model Application {
   // Denormalized from the latest StatusEvent, for fast board/list queries.
   currentStatus ApplicationStatus @default(SAVED)
 
+  // Position within its board column. Initialized from the application date
+  // (as epoch millis) so untouched columns read oldest-first by default;
+  // manually reordering a column renumbers every card in it to small
+  // sequential integers, which always sort before any still-timestamp-based
+  // sibling, so the two schemes never need reconciling against each other.
+  boardOrder Float @default(0)
+
   usedCustomCv    Boolean @default(false)
   cvVersionLabel  String?
   cvUrl           String?

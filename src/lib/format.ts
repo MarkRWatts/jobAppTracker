@@ -40,6 +40,11 @@ export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
+/** "21 Jul" — compact, no year, for tight spaces like board cards. */
+export function formatShortDate(date: Date): string {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date);
+}
+
 export function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",

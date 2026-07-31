@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { buildOrderBy, buildWhere, type ApplicationFilters, type ApplicationSort } from "./filters";
 
-/** Applications with their company and latest status event (used for "days in stage" on the board and the "last update" column in the list). */
+/** Applications with their company and latest status event — used by the list view, sortable by its column headers. */
 export function listApplications(filters: ApplicationFilters, sort: ApplicationSort) {
   return prisma.application.findMany({
     where: buildWhere(filters),
@@ -9,6 +9,22 @@ export function listApplications(filters: ApplicationFilters, sort: ApplicationS
     include: {
       company: true,
       statusEvents: { orderBy: { occurredAt: "desc" }, take: 1 },
+    },
+  });
+}
+
+/**
+ * Applications for the board — ordered by boardOrder (the board's own
+ * manual/date-derived ordering, not the list view's sortable columns), with
+ * full status-event history so each card can derive its application date.
+ */
+export function listApplicationsForBoard(filters: ApplicationFilters) {
+  return prisma.application.findMany({
+    where: buildWhere(filters),
+    orderBy: { boardOrder: "asc" },
+    include: {
+      company: true,
+      statusEvents: { orderBy: { occurredAt: "asc" } },
     },
   });
 }

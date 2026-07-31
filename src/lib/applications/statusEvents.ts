@@ -36,12 +36,42 @@ function revalidateApplication(applicationId: string) {
   revalidatePath(`/applications/${applicationId}`);
 }
 
-/** Used by the board's drag-and-drop — dropping a card on a column logs a plain status change with no stage label/notes, timestamped now. */
-export async function moveApplicationStatus(applicationId: string, status: ApplicationStatus): Promise<void> {
-  await prisma.statusEvent.create({
-    data: { applicationId, status, occurredAt: new Date() },
+/**
+ * Used by the board's drag-and-drop — moves a card to a position within
+ * `targetStatus`'s column (immediately before `beforeApplicationId`, or at
+ * the end if null/not found), renumbering every card in that column to
+ * sequential boardOrder values. If this also crosses a column boundary, logs
+ * a plain status change with no stage label/notes, timestamped now.
+ */
+export async function moveApplication(
+  applicationId: string,
+  targetStatus: ApplicationStatus,
+  beforeApplicationId: string | null,
+): Promise<void> {
+  const dragged = await prisma.application.findUniqueOrThrow({
+    where: { id: applicationId },
+    select: { currentStatus: true },
   });
-  await recomputeCurrentStatus(applicationId);
+
+  const siblings = await prisma.application.findMany({
+    where: { currentStatus: targetStatus, id: { not: applicationId } },
+    orderBy: { boardOrder: "asc" },
+    select: { id: true },
+  });
+  const orderedIds = siblings.map((s) => s.id);
+  const insertAt = beforeApplicationId ? orderedIds.indexOf(beforeApplicationId) : -1;
+  orderedIds.splice(insertAt === -1 ? orderedIds.length : insertAt, 0, applicationId);
+
+  await prisma.$transaction(
+    orderedIds.map((id, index) => prisma.application.update({ where: { id }, data: { boardOrder: index } })),
+  );
+
+  if (dragged.currentStatus !== targetStatus) {
+    await prisma.statusEvent.create({
+      data: { applicationId, status: targetStatus, occurredAt: new Date() },
+    });
+    await recomputeCurrentStatus(applicationId);
+  }
 
   revalidateApplication(applicationId);
 }
