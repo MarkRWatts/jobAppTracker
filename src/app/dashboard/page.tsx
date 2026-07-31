@@ -11,6 +11,10 @@ import { PIPELINE_STATUSES, CLOSED_STATUSES } from "@/lib/board";
 const ACTIVE_STATUSES = new Set<ApplicationStatus>(PIPELINE_STATUSES.filter((s) => s !== ApplicationStatus.ACCEPTED));
 const CLOSED_STATUS_SET = new Set<ApplicationStatus>([...CLOSED_STATUSES, ApplicationStatus.ACCEPTED]);
 
+// Needs a live DB connection for stats — never statically prerender (there's
+// no DB reachable at build time).
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const stats = await getDashboardStats();
 

@@ -4,6 +4,10 @@ import { listCompanyNames } from "@/lib/companies/queries";
 import { ApplicationFormFields } from "@/components/ApplicationFormFields";
 import { toDateTimeLocalValue } from "@/lib/format";
 
+// Needs a live DB connection for the company-name datalist — never
+// statically prerender (there's no DB reachable at build time).
+export const dynamic = "force-dynamic";
+
 export default async function NewApplicationPage() {
   const companyNames = await listCompanyNames();
 
