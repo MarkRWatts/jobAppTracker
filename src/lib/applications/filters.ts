@@ -23,10 +23,17 @@ export function parseFilters(searchParams: SearchParams): ApplicationFilters {
   return { sources, statuses, from, to };
 }
 
-export function buildWhere(filters: ApplicationFilters): Prisma.ApplicationWhereInput {
+/** Source/status filters only — no date range, since "applied date" (list view) and "added date" (board) apply it differently. */
+export function buildBaseWhere(filters: ApplicationFilters): Prisma.ApplicationWhereInput {
   const where: Prisma.ApplicationWhereInput = {};
   if (filters.sources.length > 0) where.source = { in: filters.sources };
   if (filters.statuses.length > 0) where.currentStatus = { in: filters.statuses };
+  return where;
+}
+
+/** Board view: date range filters on createdAt (added date), at the DB level. */
+export function buildWhere(filters: ApplicationFilters): Prisma.ApplicationWhereInput {
+  const where = buildBaseWhere(filters);
   if (filters.from || filters.to) {
     where.createdAt = {
       ...(filters.from ? { gte: new Date(`${filters.from}T00:00:00`) } : {}),
@@ -46,16 +53,16 @@ export function filterSearchParams(filters: ApplicationFilters): URLSearchParams
   return params;
 }
 
-export type SortField = "jobTitle" | "company" | "source" | "status" | "createdAt";
+export type SortField = "jobTitle" | "company" | "source" | "status" | "appliedDate";
 export type ApplicationSort = { field: SortField; dir: "asc" | "desc" };
 
-const SORT_FIELDS: SortField[] = ["jobTitle", "company", "source", "status", "createdAt"];
+const SORT_FIELDS: SortField[] = ["jobTitle", "company", "source", "status", "appliedDate"];
 
 export function parseSort(searchParams: SearchParams): ApplicationSort {
   const field = searchParams.sort;
   const dir = searchParams.dir;
   return {
-    field: typeof field === "string" && (SORT_FIELDS as string[]).includes(field) ? (field as SortField) : "createdAt",
+    field: typeof field === "string" && (SORT_FIELDS as string[]).includes(field) ? (field as SortField) : "appliedDate",
     dir: dir === "asc" ? "asc" : "desc",
   };
 }
@@ -69,12 +76,15 @@ export function sortSearchParams(field: SortField, current: ApplicationSort, fil
   return params;
 }
 
-export function buildOrderBy(sort: ApplicationSort): Prisma.ApplicationOrderByWithRelationInput {
+/** Undefined for "appliedDate" — it's derived from StatusEvent history, so it's sorted in JS after fetching (see listApplications). */
+export function buildOrderBy(sort: ApplicationSort): Prisma.ApplicationOrderByWithRelationInput | undefined {
   switch (sort.field) {
     case "company":
       return { company: { name: sort.dir } };
     case "status":
       return { currentStatus: sort.dir };
+    case "appliedDate":
+      return undefined;
     default:
       return { [sort.field]: sort.dir };
   }

@@ -19,7 +19,7 @@ const COLUMNS: { field: SortField; label: string }[] = [
   { field: "company", label: "Company" },
   { field: "source", label: "Source" },
   { field: "status", label: "Status" },
-  { field: "createdAt", label: "Added" },
+  { field: "appliedDate", label: "Applied" },
 ];
 
 export default async function ListPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
@@ -45,7 +45,7 @@ export default async function ListPage({ searchParams }: { searchParams: Promise
         </Link>
       </div>
 
-      <FilterBar basePath="/list" filters={filters} />
+      <FilterBar basePath="/list" filters={filters} dateLabel="Applied between" />
 
       {applications.length === 0 ? (
         <EmptyState hasFilters={hasFilters} />
@@ -81,7 +81,7 @@ export default async function ListPage({ searchParams }: { searchParams: Promise
                   <td className="px-4 py-3">
                     <StatusBadge status={application.currentStatus} />
                   </td>
-                  <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{formatDate(application.createdAt)}</td>
+                  <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">{formatDate(application.appliedDate)}</td>
                   <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
                     {cvCoverLetterSummary(application.usedCustomCv, application.usedCoverLetter) ?? "—"}
                   </td>

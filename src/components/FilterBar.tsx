@@ -7,7 +7,15 @@ const chipClass =
 const dateInputClass =
   "rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 shadow-sm focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100";
 
-export function FilterBar({ basePath, filters }: { basePath: string; filters: ApplicationFilters }) {
+export function FilterBar({
+  basePath,
+  filters,
+  dateLabel = "Added between",
+}: {
+  basePath: string;
+  filters: ApplicationFilters;
+  dateLabel?: string;
+}) {
   const hasFilters = filters.sources.length > 0 || filters.statuses.length > 0 || filters.from || filters.to;
 
   return (
@@ -47,7 +55,7 @@ export function FilterBar({ basePath, filters }: { basePath: string; filters: Ap
 
         <fieldset className="flex flex-col gap-1.5">
           <legend className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-            Added between
+            {dateLabel}
           </legend>
           <div className="flex items-center gap-2">
             <input type="date" name="from" defaultValue={filters.from ?? undefined} className={dateInputClass} />

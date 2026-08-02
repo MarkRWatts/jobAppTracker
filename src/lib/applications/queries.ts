@@ -1,18 +1,41 @@
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth/dal";
-import { buildOrderBy, buildWhere, type ApplicationFilters, type ApplicationSort } from "./filters";
+import { buildBaseWhere, buildOrderBy, buildWhere, type ApplicationFilters, type ApplicationSort } from "./filters";
+import { getApplicationDate } from "./applicationDate";
 
-/** Applications with their company and latest status event — used by the list view, sortable by its column headers. */
+/**
+ * Applications with their company — used by the list view, sortable by its
+ * column headers. Dated by applied date (see getApplicationDate), not
+ * createdAt, so the date range filter and "appliedDate" sort are both
+ * computed here in JS from the full status-event history rather than at the
+ * DB level.
+ */
 export async function listApplications(filters: ApplicationFilters, sort: ApplicationSort) {
   const { id: userId } = await requireUser();
-  return prisma.application.findMany({
-    where: { ...buildWhere(filters), userId },
+  const applications = await prisma.application.findMany({
+    where: { ...buildBaseWhere(filters), userId },
     orderBy: buildOrderBy(sort),
     include: {
       company: true,
-      statusEvents: { orderBy: { occurredAt: "desc" }, take: 1 },
+      statusEvents: { orderBy: { occurredAt: "asc" } },
     },
   });
+
+  const dated = applications
+    .map((application) => ({ ...application, appliedDate: getApplicationDate(application.statusEvents) }))
+    .filter((application) => {
+      if (filters.from && application.appliedDate < new Date(`${filters.from}T00:00:00`)) return false;
+      if (filters.to && application.appliedDate > new Date(`${filters.to}T23:59:59`)) return false;
+      return true;
+    });
+
+  if (sort.field === "appliedDate") {
+    dated.sort((a, b) =>
+      sort.dir === "asc" ? a.appliedDate.getTime() - b.appliedDate.getTime() : b.appliedDate.getTime() - a.appliedDate.getTime(),
+    );
+  }
+
+  return dated;
 }
 
 /**
