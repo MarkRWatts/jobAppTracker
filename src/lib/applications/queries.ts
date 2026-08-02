@@ -1,10 +1,12 @@
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth/dal";
 import { buildOrderBy, buildWhere, type ApplicationFilters, type ApplicationSort } from "./filters";
 
 /** Applications with their company and latest status event — used by the list view, sortable by its column headers. */
-export function listApplications(filters: ApplicationFilters, sort: ApplicationSort) {
+export async function listApplications(filters: ApplicationFilters, sort: ApplicationSort) {
+  const { id: userId } = await requireUser();
   return prisma.application.findMany({
-    where: buildWhere(filters),
+    where: { ...buildWhere(filters), userId },
     orderBy: buildOrderBy(sort),
     include: {
       company: true,
@@ -18,9 +20,10 @@ export function listApplications(filters: ApplicationFilters, sort: ApplicationS
  * manual/date-derived ordering, not the list view's sortable columns), with
  * full status-event history so each card can derive its application date.
  */
-export function listApplicationsForBoard(filters: ApplicationFilters) {
+export async function listApplicationsForBoard(filters: ApplicationFilters) {
+  const { id: userId } = await requireUser();
   return prisma.application.findMany({
-    where: buildWhere(filters),
+    where: { ...buildWhere(filters), userId },
     orderBy: { boardOrder: "asc" },
     include: {
       company: true,
@@ -29,13 +32,15 @@ export function listApplicationsForBoard(filters: ApplicationFilters) {
   });
 }
 
-export function getStatusEvent(eventId: string) {
-  return prisma.statusEvent.findUnique({ where: { id: eventId } });
+export async function getStatusEvent(eventId: string) {
+  const { id: userId } = await requireUser();
+  return prisma.statusEvent.findFirst({ where: { id: eventId, application: { userId } } });
 }
 
-export function getApplication(id: string) {
-  return prisma.application.findUnique({
-    where: { id },
+export async function getApplication(id: string) {
+  const { id: userId } = await requireUser();
+  return prisma.application.findFirst({
+    where: { id, userId },
     include: {
       company: true,
       statusEvents: { orderBy: { occurredAt: "desc" } },

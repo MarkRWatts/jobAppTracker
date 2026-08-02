@@ -1,8 +1,8 @@
 # Job Application Tracker
 
-A lightweight, single-user web app for tracking job applications end to end — status pipeline, dates at every stage, salary/day-rate and IR35 status, CV/cover-letter usage, file attachments, reminders, and a dashboard of stats.
+A lightweight, multi-user web app for tracking job applications end to end — status pipeline, dates at every stage, salary/day-rate and IR35 status, CV/cover-letter usage, file attachments, reminders, and a dashboard of stats.
 
-Built as a personal tool, not a multi-tenant product: there's no auth, no user accounts, and no plans to add either.
+Sign in with Google; every user's applications, companies, and uploaded files are private to their own account.
 
 ## Features
 
@@ -13,7 +13,7 @@ Built as a personal tool, not a multi-tenant product: there's no auth, no user a
 - **Salary / day rate** — permanent roles record a salary range; contract roles record a day rate and IR35 status instead
 - **CV & cover-letter tracking** — mark whether a tailored CV/cover letter was used, plus free-form file attachments (CV, cover letter, or other documents) per application
 - **Reminders** with an upcoming-reminders widget
-- **Light / dark / system theme toggle**
+- **Sign in with Google** — each user's data (applications, companies, uploaded files) is scoped to their own account
 
 ## Tech stack
 
@@ -22,6 +22,7 @@ Built as a personal tool, not a multi-tenant product: there's no auth, no user a
 - [Prisma 7](https://www.prisma.io/) ORM + PostgreSQL (via `@prisma/adapter-pg`)
 - [Tailwind CSS v4](https://tailwindcss.com/)
 - [@dnd-kit](https://dndkit.com/) for drag-and-drop
+- [Auth.js v5](https://authjs.dev/) (`next-auth`) + `@auth/prisma-adapter`, database sessions, Google as the only provider
 - Docker / Docker Compose for deployment
 
 ## Project structure
@@ -58,6 +59,8 @@ cp .env.example .env                 # DATABASE_URL for `npm run dev` — must u
 ```
 
 Edit both files and set a real `POSTGRES_PASSWORD` / matching `DATABASE_URL` password (the checked-in examples use a placeholder).
+
+Both files also need Google OAuth credentials — see [Authentication setup](#authentication-setup) below.
 
 ### 3. Start Postgres
 
@@ -105,16 +108,35 @@ docker compose --env-file .env.docker up -d --build app
 | File | Variable | Used by |
 | --- | --- | --- |
 | `.env` | `DATABASE_URL` | `npm run dev`, Prisma CLI |
+| `.env` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `AUTH_URL` | `npm run dev` (Auth.js) |
 | `.env.docker` | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | `docker compose` (both `db` and `app` services) |
+| `.env.docker` | `AUTH_GOOGLE_ID`, `AUTH_GOOGLE_SECRET`, `AUTH_SECRET`, `AUTH_TRUST_HOST`, `AUTH_URL` | `docker compose` (`app` service) |
 
 See `.env.example` and `.env.docker.example` for the expected shape.
+
+## Authentication setup
+
+Sign-in is Google-only, via [Auth.js](https://authjs.dev/). Setup is free and needs no HTTPS/tunnel for local use, since Google explicitly permits plain `http://localhost` redirect URIs:
+
+1. In [Google Cloud Console](https://console.cloud.google.com), create (or select) a project.
+2. **APIs & Services → OAuth consent screen** — User type: External. Fill in an app name and support/contact email. Leave scopes at the defaults (`email`, `profile`, `openid`). Add yourself (and any other testers) under **Test users**. Leave the publishing status as **Testing** — this skips Google's app-review process and supports up to 100 users, which is enough for personal/small-group use.
+3. **APIs & Services → Credentials → + Create Credentials → OAuth client ID** — Application type: Web application. Add authorized redirect URIs for however you run this:
+   - `http://localhost:3000/api/auth/callback/google` (`npm run dev`)
+   - `http://localhost:3001/api/auth/callback/google` (Docker)
+4. Copy the generated **Client ID**/**Client Secret** into `AUTH_GOOGLE_ID`/`AUTH_GOOGLE_SECRET` in both `.env` and `.env.docker`.
+5. Generate `AUTH_SECRET` (Auth.js's own cookie-encryption key, unrelated to Google): `openssl rand -base64 32`.
+
+A reverse proxy + real HTTPS domain is only needed if this is ever exposed beyond `localhost` — not required for local use.
+
+`Company.userId`/`Application.userId` are `NOT NULL` — every row always belongs to a real, signed-in user.
 
 ## Data model
 
 Core entities (see `prisma/schema.prisma` for the full picture):
 
-- **Company** — has many Applications
-- **Application** — job title, source, employment type (permanent/contract), salary range or day rate + IR35 status, current status (denormalized from its latest StatusEvent), board position
+- **User** — an authenticated account (via Google); owns Companies and Applications. `Account`/`Session`/`VerificationToken` are Auth.js's own bookkeeping tables (`@auth/prisma-adapter`'s contract), not used directly by app code.
+- **Company** — belongs to a User; has many Applications
+- **Application** — belongs to a User; job title, source, employment type (permanent/contract), salary range or day rate + IR35 status, current status (denormalized from its latest StatusEvent), board position
 - **StatusEvent** — one row per status change, with a timestamp, optional stage label, and notes — the source of truth for the timeline
 - **Contact** — recruiter/hiring-manager contacts per application
 - **Reminder** — a due date, description, and done flag

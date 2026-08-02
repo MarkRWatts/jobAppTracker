@@ -5,16 +5,24 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  const acme = await prisma.company.create({
-    data: { name: "Acme Corp", website: "https://acme.example" },
+  const devUser = await prisma.user.upsert({
+    where: { email: "dev@example.com" },
+    update: {},
+    create: { email: "dev@example.com", name: "Dev User" },
   });
-  const globex = await prisma.company.create({ data: { name: "Globex" } });
-  const initech = await prisma.company.create({ data: { name: "Initech" } });
-  const umbrella = await prisma.company.create({ data: { name: "Umbrella Group" } });
-  const soylent = await prisma.company.create({ data: { name: "Soylent Industries" } });
+  const userId = devUser.id;
+
+  const acme = await prisma.company.create({
+    data: { userId, name: "Acme Corp", website: "https://acme.example" },
+  });
+  const globex = await prisma.company.create({ data: { userId, name: "Globex" } });
+  const initech = await prisma.company.create({ data: { userId, name: "Initech" } });
+  const umbrella = await prisma.company.create({ data: { userId, name: "Umbrella Group" } });
+  const soylent = await prisma.company.create({ data: { userId, name: "Soylent Industries" } });
 
   await prisma.application.create({
     data: {
+      userId,
       companyId: acme.id,
       jobTitle: "Head of Security",
       source: "LINKEDIN",
@@ -32,6 +40,7 @@ async function main() {
 
   await prisma.application.create({
     data: {
+      userId,
       companyId: globex.id,
       jobTitle: "Director of Security & Compliance",
       source: "DIRECT",
@@ -51,6 +60,7 @@ async function main() {
 
   await prisma.application.create({
     data: {
+      userId,
       companyId: initech.id,
       jobTitle: "BISO Cyber GRC Associate",
       source: "REED",
@@ -61,6 +71,7 @@ async function main() {
 
   await prisma.application.create({
     data: {
+      userId,
       companyId: umbrella.id,
       jobTitle: "Deputy Director Cyber Security",
       source: "TOTAL_JOBS",
@@ -76,6 +87,7 @@ async function main() {
 
   await prisma.application.create({
     data: {
+      userId,
       companyId: soylent.id,
       jobTitle: "Information Security Officer",
       source: "OTHER",

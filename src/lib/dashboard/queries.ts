@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth/dal";
 import { ApplicationStatus, Source } from "@/generated/prisma/enums";
 import { PIPELINE_STATUSES, CLOSED_STATUSES } from "@/lib/board";
 
@@ -23,7 +24,9 @@ export type DashboardStats = {
 };
 
 export async function getDashboardStats(): Promise<DashboardStats> {
+  const { id: userId } = await requireUser();
   const applications = await prisma.application.findMany({
+    where: { userId },
     select: {
       source: true,
       currentStatus: true,

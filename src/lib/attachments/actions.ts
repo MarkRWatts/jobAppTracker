@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth/dal";
 import { AttachmentCategory } from "@/generated/prisma/enums";
 import { saveAttachmentFile, deleteAttachmentFile, MAX_ATTACHMENT_BYTES } from "./storage";
 
@@ -12,6 +13,13 @@ function parseCategory(formData: FormData): AttachmentCategory {
 }
 
 export async function uploadAttachment(applicationId: string, formData: FormData): Promise<void> {
+  const { id: userId } = await requireUser();
+  const application = await prisma.application.findFirst({
+    where: { id: applicationId, userId },
+    select: { id: true },
+  });
+  if (!application) throw new Error("Application not found");
+
   const category = parseCategory(formData);
   const file = formData.get("file");
   if (!(file instanceof File) || file.size === 0) {
@@ -22,7 +30,7 @@ export async function uploadAttachment(applicationId: string, formData: FormData
   }
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  const storedName = await saveAttachmentFile(file.name, bytes);
+  const storedName = await saveAttachmentFile(userId, file.name, bytes);
 
   await prisma.attachment.create({
     data: {
@@ -39,8 +47,11 @@ export async function uploadAttachment(applicationId: string, formData: FormData
 }
 
 export async function deleteAttachment(id: string): Promise<void> {
-  const existing = await prisma.attachment.findUniqueOrThrow({ where: { id } });
-  await prisma.attachment.delete({ where: { id } });
-  await deleteAttachmentFile(existing.storedName);
+  const { id: userId } = await requireUser();
+  const existing = await prisma.attachment.findFirst({ where: { id, application: { userId } } });
+  if (!existing) throw new Error("Attachment not found");
+  const result = await prisma.attachment.deleteMany({ where: { id, application: { userId } } });
+  if (result.count === 0) throw new Error("Attachment not found");
+  await deleteAttachmentFile(userId, existing.storedName);
   revalidatePath(`/applications/${existing.applicationId}`);
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { requireUser } from "@/lib/auth/dal";
 import { ApplicationStatus } from "@/generated/prisma/enums";
 import { textOrNull, parseOccurredAt } from "@/lib/forms";
 
@@ -13,7 +14,7 @@ function parseStatus(formData: FormData): ApplicationStatus {
 }
 
 /** currentStatus is denormalized as "whichever StatusEvent has the latest occurredAt" — recomputed after every add/edit/delete, since events can be logged out of chronological order (e.g. backfilling a call that happened last week). */
-async function recomputeCurrentStatus(applicationId: string): Promise<void> {
+async function recomputeCurrentStatus(applicationId: string, userId: string): Promise<void> {
   const latest = await prisma.statusEvent.findFirst({
     where: { applicationId },
     orderBy: { occurredAt: "desc" },
@@ -24,10 +25,11 @@ async function recomputeCurrentStatus(applicationId: string): Promise<void> {
     // deleted the last event out from under us.
     throw new Error("Application has no status events left");
   }
-  await prisma.application.update({
-    where: { id: applicationId },
+  const result = await prisma.application.updateMany({
+    where: { id: applicationId, userId },
     data: { currentStatus: latest.status },
   });
+  if (result.count === 0) throw new Error("Application not found");
 }
 
 function revalidateApplication(applicationId: string) {
@@ -48,13 +50,15 @@ export async function moveApplication(
   targetStatus: ApplicationStatus,
   beforeApplicationId: string | null,
 ): Promise<void> {
-  const dragged = await prisma.application.findUniqueOrThrow({
-    where: { id: applicationId },
+  const { id: userId } = await requireUser();
+
+  const dragged = await prisma.application.findFirstOrThrow({
+    where: { id: applicationId, userId },
     select: { currentStatus: true },
   });
 
   const siblings = await prisma.application.findMany({
-    where: { currentStatus: targetStatus, id: { not: applicationId } },
+    where: { currentStatus: targetStatus, userId, id: { not: applicationId } },
     orderBy: { boardOrder: "asc" },
     select: { id: true },
   });
@@ -63,20 +67,29 @@ export async function moveApplication(
   orderedIds.splice(insertAt === -1 ? orderedIds.length : insertAt, 0, applicationId);
 
   await prisma.$transaction(
-    orderedIds.map((id, index) => prisma.application.update({ where: { id }, data: { boardOrder: index } })),
+    orderedIds.map((id, index) =>
+      prisma.application.updateMany({ where: { id, userId }, data: { boardOrder: index } }),
+    ),
   );
 
   if (dragged.currentStatus !== targetStatus) {
     await prisma.statusEvent.create({
       data: { applicationId, status: targetStatus, occurredAt: new Date() },
     });
-    await recomputeCurrentStatus(applicationId);
+    await recomputeCurrentStatus(applicationId, userId);
   }
 
   revalidateApplication(applicationId);
 }
 
 export async function logStatusEvent(applicationId: string, formData: FormData): Promise<void> {
+  const { id: userId } = await requireUser();
+  const application = await prisma.application.findFirst({
+    where: { id: applicationId, userId },
+    select: { id: true },
+  });
+  if (!application) throw new Error("Application not found");
+
   const status = parseStatus(formData);
   const stageLabel = textOrNull(formData, "stageLabel");
   const occurredAt = parseOccurredAt(formData);
@@ -85,39 +98,51 @@ export async function logStatusEvent(applicationId: string, formData: FormData):
   await prisma.statusEvent.create({
     data: { applicationId, status, stageLabel, occurredAt, notes },
   });
-  await recomputeCurrentStatus(applicationId);
+  await recomputeCurrentStatus(applicationId, userId);
 
   revalidateApplication(applicationId);
 }
 
 export async function updateStatusEvent(eventId: string, formData: FormData): Promise<void> {
-  const existing = await prisma.statusEvent.findUniqueOrThrow({ where: { id: eventId } });
+  const { id: userId } = await requireUser();
+  const existing = await prisma.statusEvent.findFirst({
+    where: { id: eventId, application: { userId } },
+    select: { applicationId: true },
+  });
+  if (!existing) throw new Error("Status event not found");
 
   const status = parseStatus(formData);
   const stageLabel = textOrNull(formData, "stageLabel");
   const occurredAt = parseOccurredAt(formData);
   const notes = textOrNull(formData, "notes");
 
-  await prisma.statusEvent.update({
-    where: { id: eventId },
+  const result = await prisma.statusEvent.updateMany({
+    where: { id: eventId, application: { userId } },
     data: { status, stageLabel, occurredAt, notes },
   });
-  await recomputeCurrentStatus(existing.applicationId);
+  if (result.count === 0) throw new Error("Status event not found");
+  await recomputeCurrentStatus(existing.applicationId, userId);
 
   revalidateApplication(existing.applicationId);
   redirect(`/applications/${existing.applicationId}`);
 }
 
 export async function deleteStatusEvent(eventId: string): Promise<void> {
-  const existing = await prisma.statusEvent.findUniqueOrThrow({ where: { id: eventId } });
+  const { id: userId } = await requireUser();
+  const existing = await prisma.statusEvent.findFirst({
+    where: { id: eventId, application: { userId } },
+    select: { applicationId: true },
+  });
+  if (!existing) throw new Error("Status event not found");
 
   const remainingCount = await prisma.statusEvent.count({ where: { applicationId: existing.applicationId } });
   if (remainingCount <= 1) {
     throw new Error("Can't delete the only status event on an application");
   }
 
-  await prisma.statusEvent.delete({ where: { id: eventId } });
-  await recomputeCurrentStatus(existing.applicationId);
+  const result = await prisma.statusEvent.deleteMany({ where: { id: eventId, application: { userId } } });
+  if (result.count === 0) throw new Error("Status event not found");
+  await recomputeCurrentStatus(existing.applicationId, userId);
 
   revalidateApplication(existing.applicationId);
 }
