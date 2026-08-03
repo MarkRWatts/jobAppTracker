@@ -1,0 +1,11 @@
+jobapptracker.markrwatts.com {
+	tls {
+		dns acmedns {
+			username {env.ACMEDNS_USERNAME}
+			password {env.ACMEDNS_PASSWORD}
+			subdomain {env.ACMEDNS_SUBDOMAIN}
+			server_url https://auth.acme-dns.io
+		}
+	}
+	reverse_proxy app:3000
+}

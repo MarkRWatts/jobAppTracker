@@ -1,0 +1,29 @@
+# VM deployment overlay — used via:
+#   docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Adds Caddy as a reverse proxy in front of `app` (HTTPS via the acme-dns
+# DNS-01 challenge — see Caddyfile). Deliberately not merged into the base
+# docker-compose.yml, which the Mac's local/dev setup also uses with no
+# proxy at all (see docker-compose.override.yml).
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      ACMEDNS_USERNAME: ${ACMEDNS_USERNAME:?set ACMEDNS_USERNAME in .env.docker}
+      ACMEDNS_PASSWORD: ${ACMEDNS_PASSWORD:?set ACMEDNS_PASSWORD in .env.docker}
+      ACMEDNS_SUBDOMAIN: ${ACMEDNS_SUBDOMAIN:?set ACMEDNS_SUBDOMAIN in .env.docker}
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

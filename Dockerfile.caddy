@@ -1,0 +1,9 @@
+# Caddy with the acme-dns DNS-01 plugin baked in — not in the stock Caddy
+# image, since DNS provider plugins are compiled in via xcaddy. Used only by
+# docker-compose.prod.yml (the VM deployment); the Mac's local/dev compose
+# setup has no reverse proxy at all.
+FROM caddy:builder AS builder
+RUN xcaddy build --with github.com/caddy-dns/acmedns
+
+FROM caddy:latest
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy
