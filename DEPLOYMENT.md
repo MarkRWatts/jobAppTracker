@@ -61,20 +61,22 @@ git clone https://github.com/MarkRWatts/jobAppTracker.git ~/jobAppTracker
 
 Future deploys are just `git pull` + rebuild (see [Updating](#updating-the-deployment) below).
 
-## 3. HTTPS: Caddy + acme-dns
+## 3. HTTPS: shared Caddy reverse proxy
+
+**Update**: Caddy no longer runs inside this repo's own `docker-compose.prod.yml` — it moved to a small shared stack (`~/edge` on the server) once a second app (reFresh) needed to live on the same VM. Only one process can bind host ports 443/80, and Caddy is designed to serve many domains from one instance anyway (one Caddyfile, one site block per domain, SNI-based routing), so a single shared Caddy now fronts every app on this VM. This app's `docker-compose.prod.yml` just joins that Caddy's `edge` Docker network — see [Shared reverse proxy](#shared-reverse-proxy-edge) below for the actual Caddy setup.
 
 The domain (`example.com`) is on Easyspace, which has no DNS API — so there's no direct Caddy DNS-01 plugin for it. The fix is **acme-dns delegation**: a one-time CNAME hands off just the ACME challenge subdomain to the free `auth.acme-dns.io` service, which Caddy's `caddy-dns/acmedns` plugin talks to for every cert issuance/renewal. The actual site's A record stays managed at Easyspace as normal.
 
-One-time acme-dns registration:
+One-time acme-dns registration (done once per app — each app gets its own acme-dns account, to avoid any renewal race between apps sharing one):
 
 ```bash
 curl -X POST https://auth.acme-dns.io/register
 ```
 
-This returns `username`, `password`, `subdomain`, and `fulldomain`. For this deployment:
+This returns `username`, `password`, `subdomain`, and `fulldomain`. For this app:
 - `username`: `edaa2bbc-591c-46aa-82bc-e0afc98bd31b`
 - `subdomain`: `2f17c12b-b3e0-410c-a775-e083e1c03704`
-- `password`: not recorded here — it's in `.env.docker` on the server only (see [below](#4-envdocker))
+- `password`: not recorded here — it's in `~/edge/.env` on the server only
 
 Two DNS records added at Easyspace:
 
@@ -83,19 +85,15 @@ Two DNS records added at Easyspace:
 | CNAME | `_acme-challenge.jobapptracker` | `2f17c12b-b3e0-410c-a775-e083e1c03704.auth.acme-dns.io` |
 | A | `jobapptracker` | `192.168.1.1` |
 
-Caddy itself is defined in this repo, not hand-configured on the server:
-- [`Dockerfile.caddy`](Dockerfile.caddy) — builds Caddy with the `caddy-dns/acmedns` plugin (not in the stock image).
-- [`Caddyfile`](Caddyfile) — the site block. Note the `{$VAR}` syntax for reading env vars at Caddyfile-parse time (`{env.VAR}` is a different thing — a runtime request placeholder — and won't substitute here).
-- [`docker-compose.prod.yml`](docker-compose.prod.yml) — the VM-only overlay that adds the `caddy` service and publishes 443/80. Also pins Caddy's own DNS resolution to `1.1.1.1`/`9.9.9.9`: the LAN's local DNS server had a stale cached negative (`NXDOMAIN`) response for the acme-dns hostname during initial setup, which broke the DNS-01 propagation check even though the record was correctly in place — pinning to a public resolver sidesteps the LAN's resolver entirely for this one container.
-- [`docker-compose.override.yml`](docker-compose.override.yml) — keeps the Mac's local/dev setup (direct port publish, no proxy) working unchanged; auto-loaded only when no `-f` flags are given, so it never applies on the VM.
+[`docker-compose.prod.yml`](docker-compose.prod.yml) — the VM-only overlay. Joins `app` to the external `edge` network under the alias `jobapptracker`, so the shared Caddy can reach it as `jobapptracker:3000`; publishes no host port. [`docker-compose.override.yml`](docker-compose.override.yml) keeps the Mac's local/dev setup (direct port publish, no proxy) working unchanged — auto-loaded only when no `-f` flags are given, so it never applies on the VM.
 
 ## 4. `.env.docker`
 
 Created directly on the server (never committed — see `.env.docker.example` for the full variable list and shape). Differences from the Mac's version:
 - `AUTH_URL=https://jobapptracker.example.com` (was `http://localhost:3001`)
-- `ACMEDNS_USERNAME` / `ACMEDNS_PASSWORD` / `ACMEDNS_SUBDOMAIN` added, from the registration above
 - `POSTGRES_PASSWORD` and `AUTH_SECRET` rotated to fresh values (no need to match the Mac's, since Postgres starts from a fresh init and sessions don't carry over across a rotated `AUTH_SECRET` anyway)
 - `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` unchanged — same OAuth client as the Mac setup
+- No `ACMEDNS_*` vars here — those live in `~/edge/.env` now (see [Shared reverse proxy](#shared-reverse-proxy-edge))
 
 ## 5. Google OAuth redirect URI
 
@@ -133,11 +131,13 @@ rm -f ~/jobapptracker.dump ~/uploads.tar.gz   # clean up the transferred archive
 ## 7. Bring up the full stack
 
 ```bash
+docker network create edge   # once — see Shared reverse proxy below; skip if it already exists
 cd ~/jobAppTracker
 docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+cd ~/edge && docker compose up -d --build   # brings up the shared Caddy, obtains the cert
 ```
 
-Starts `db`, `app`, and `caddy` together; `app`'s boot-time `prisma migrate deploy` no-ops since the schema's already current from the restored dump, and Caddy obtains its certificate automatically on first start.
+`app`'s boot-time `prisma migrate deploy` no-ops since the schema's already current from the restored dump.
 
 ## 8. Verify
 
@@ -158,6 +158,46 @@ docker stop jobapptracker-app-1 jobapptracker-db-1
 ```
 
 `docker start jobapptracker-app-1 jobapptracker-db-1` brings the old Mac instance straight back if ever needed.
+
+## Shared reverse proxy (`~/edge`)
+
+A single Caddy instance on the VM fronts **every** app on it — currently this one and [reFresh](https://github.com/MarkRWatts/reFresh) (see its own `DEPLOYMENT.md`). It lives at `~/edge` on the server directly, not in either app's git repo, since it isn't owned by any one app:
+
+- `docker network create edge` — one external Docker network both apps' `app` containers join (via each repo's own `docker-compose.prod.yml`).
+- `Dockerfile.caddy` — builds Caddy with the `caddy-dns/acmedns` plugin (not in the stock image):
+  ```dockerfile
+  FROM caddy:builder AS builder
+  RUN xcaddy build --with github.com/caddy-dns/acmedns
+
+  FROM caddy:latest
+  COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+  ```
+- `Caddyfile` — one site block per app, each with its own acme-dns credentials (a separate acme-dns registration per app — see step 3 above for how those are obtained):
+  ```
+  jobapptracker.example.com {
+      tls {
+          dns acmedns {
+              username {$JOBAPPTRACKER_ACMEDNS_USERNAME}
+              password {$JOBAPPTRACKER_ACMEDNS_PASSWORD}
+              subdomain {$JOBAPPTRACKER_ACMEDNS_SUBDOMAIN}
+              server_url https://auth.acme-dns.io
+          }
+      }
+      reverse_proxy jobapptracker:3000
+  }
+
+  refresh.example.com {
+      tls {
+          dns acmedns { ... }   # same shape, REFRESH_ACMEDNS_* vars
+      }
+      reverse_proxy refresh:3000
+  }
+  ```
+  Note `{$VAR}` — reads an env var at Caddyfile-parse time. `{env.VAR}` is a different thing (a runtime request placeholder) and silently won't substitute here; this bit the very first version of this setup.
+- `docker-compose.yml`: the `caddy` service — publishes `443`/`80`, mounts the `Caddyfile`, joins the external `edge` network, and pins its own DNS resolution to `1.1.1.1`/`9.9.9.9` (the LAN's local resolver had propagation-check trouble with the acme-dns hostname during the very first setup — pinning sidesteps it entirely for this one container).
+- `.env` (not committed anywhere): `<APPNAME>_ACMEDNS_USERNAME`/`PASSWORD`/`SUBDOMAIN` per app.
+
+Adding a third app later: register it its own acme-dns account, add its DNS records, add a site block to this `Caddyfile`, add its credentials to this `.env`, `docker compose up -d --build`, and have the new app's own `docker-compose.prod.yml` join the `edge` network under a clear alias — no changes needed to the other apps.
 
 ## Updating the deployment
 
