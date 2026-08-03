@@ -12,6 +12,13 @@ services:
     restart: unless-stopped
     depends_on:
       - app
+    # The VM's local DNS resolver returns NXDOMAIN for the acme-dns
+    # hostname (works fine from a public resolver) — pin Caddy to reliable
+    # public resolvers rather than touching the host/network DNS config,
+    # since ACME's DNS-01 propagation check needs this to actually work.
+    dns:
+      - 1.1.1.1
+      - 9.9.9.9
     environment:
       ACMEDNS_USERNAME: ${ACMEDNS_USERNAME:?set ACMEDNS_USERNAME in .env.docker}
       ACMEDNS_PASSWORD: ${ACMEDNS_PASSWORD:?set ACMEDNS_PASSWORD in .env.docker}
