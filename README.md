@@ -103,6 +103,10 @@ To rebuild after pulling new code:
 docker compose --env-file .env.docker up -d --build app
 ```
 
+## Production deployment
+
+The app also runs on a TrueNAS-hosted Ubuntu VM, behind a Caddy reverse proxy with a real Let's Encrypt certificate (DNS-01 via acme-dns) — see [DEPLOYMENT.md](DEPLOYMENT.md) for the full setup, including why plain HTTP stops being an option once you're off `localhost`.
+
 ## Environment variables
 
 | File | Variable | Used by |
