@@ -199,6 +199,46 @@ A single Caddy instance on the VM fronts **every** app on it — currently this 
 
 Adding a third app later: register it its own acme-dns account, add its DNS records, add a site block to this `Caddyfile`, add its credentials to this `.env`, `docker compose up -d --build`, and have the new app's own `docker-compose.prod.yml` join the `edge` network under a clear alias — no changes needed to the other apps.
 
+## Automated backups (`~/backups`)
+
+Same reasoning as `~/edge` — this covers every app's database, so it lives on the server directly rather than in any one app's repo. `~/backups/backup-databases.sh`:
+
+```sh
+#!/bin/sh
+set -eu
+
+BACKUP_ROOT="$HOME/backups"
+RETENTION_DAYS=14
+DATE=$(date +%Y-%m-%d)
+
+backup_app() {
+  app="$1"; container="$2"; db_user="$3"; db_name="$4"
+  dir="$BACKUP_ROOT/$app"
+  file="$dir/${app}-${DATE}.dump"
+
+  if docker exec "$container" pg_dump -U "$db_user" -Fc "$db_name" > "$file"; then
+    echo "$(date -Is) OK: $file ($(du -h "$file" | cut -f1))"
+    find "$dir" -name "${app}-*.dump" -mtime "+${RETENTION_DAYS}" -print -delete
+  else
+    echo "$(date -Is) ERROR: backup failed for $app" >&2
+    rm -f "$file"
+  fi
+}
+
+backup_app jobapptracker jobapptracker-db-1 jobapptracker jobapptracker
+backup_app refresh refresh-db-1 refresh refresh
+```
+
+Dumps go to `~/backups/<app>/<app>-YYYY-MM-DD.dump` (custom-format `pg_dump`, restorable with `pg_restore` the same way the original data migration was — see step 6 above). The retention prune only runs after a *successful* dump for that app, so a broken cron run can't slowly erode existing history down to nothing. Scheduled via the `mwatts`/`deploy` user's crontab (`cron` isn't installed by default on this Ubuntu image — `sudo apt-get install -y cron`):
+
+```bash
+(crontab -l 2>/dev/null; echo "0 4 * * * /home/deploy/backups/backup-databases.sh >> /home/deploy/backups/backup.log 2>&1") | crontab -
+```
+
+Adding a third app's database to this later: add another `backup_app` line with its container/user/db name.
+
+**Known limitation**: this only protects against database corruption, a bad migration, or an accidental `DELETE` — the backups live on the same VM disk as the live data, so they don't help if the VM's disk itself fails. Worth a follow-up to also copy these off-VM (e.g. to the TrueNAS host's own storage) if that risk matters enough to act on.
+
 ## Updating the deployment
 
 ```bash
