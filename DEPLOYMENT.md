@@ -27,6 +27,17 @@ echo \
 sudo apt-get update -y
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 sudo systemctl enable --now docker
+```
+
+Create the `deploy` user itself — no `sudo` granted, `docker` group membership
+is all it needs. Authorize the same key already trusted for the admin
+account (`mwatts`) rather than generating a new key pair, so 1Password's SSH
+agent covers both:
+
+```bash
+sudo useradd -m deploy
+sudo install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
+sudo install -m 600 -o deploy -g deploy ~/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
 sudo usermod -aG docker deploy   # log out/in (or new SSH session) for this to take effect
 ```
 
@@ -229,7 +240,7 @@ backup_app jobapptracker jobapptracker-db-1 jobapptracker jobapptracker
 backup_app refresh refresh-db-1 refresh refresh
 ```
 
-Dumps go to `~/backups/<app>/<app>-YYYY-MM-DD.dump` (custom-format `pg_dump`, restorable with `pg_restore` the same way the original data migration was — see step 6 above). The retention prune only runs after a *successful* dump for that app, so a broken cron run can't slowly erode existing history down to nothing. Scheduled via the `mwatts`/`deploy` user's crontab (`cron` isn't installed by default on this Ubuntu image — `sudo apt-get install -y cron`):
+Dumps go to `~/backups/<app>/<app>-YYYY-MM-DD.dump` (custom-format `pg_dump`, restorable with `pg_restore` the same way the original data migration was — see step 6 above). The retention prune only runs after a *successful* dump for that app, so a broken cron run can't slowly erode existing history down to nothing. Scheduled via the `deploy` user's crontab (`cron` isn't installed by default on this Ubuntu image — `sudo apt-get install -y cron`):
 
 ```bash
 (crontab -l 2>/dev/null; echo "0 4 * * * /home/deploy/backups/backup-databases.sh >> /home/deploy/backups/backup.log 2>&1") | crontab -
@@ -250,5 +261,5 @@ docker compose --env-file .env.docker -f docker-compose.yml -f docker-compose.pr
 
 ## Known follow-ups
 
-- `/etc/sudoers.d/90-deploy-nopasswd` grants `deploy` passwordless sudo, added temporarily to automate the base OS setup. Worth removing now that setup is done (`sudo rm /etc/sudoers.d/90-deploy-nopasswd`) — nothing past step 1 needs root, only the `docker` group.
+- `deploy` has no `sudo` at all — only `docker` group membership, which is all anything past step 1 needs. Passwordless sudo (`/etc/sudoers.d/90-mwatts-deploy`) is granted to the admin account (`mwatts`) instead, to automate base OS setup; `mwatts` is no longer in the `docker` group, so it can't touch any app's containers directly.
 - The LAN's local DNS server (Pi-hole, `192.168.1.53`) had a stale negative-cache entry for the acme-dns hostname during setup, unrelated to any blocklist — it self-clears on its own TTL, and doesn't affect the app (Caddy bypasses it, see step 3).
